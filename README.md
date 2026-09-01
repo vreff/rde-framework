@@ -1,6 +1,6 @@
 # rde-framework
 
-Tooling repository meant to make specification-driven development easier. Inspired by VoteSecure's [Rigorous Digital Engineering](https://rde.freeandfair.us/Rigorous%20Digital%20Engineering%20for%20VoteSecure%20-%20Full%20Article.pdf) handbook.
+Tooling repository meant to make specification-driven development easier. Inspired by FreeAndFair's [Rigorous Digital Engineering](https://rde.freeandfair.us/Rigorous%20Digital%20Engineering%20for%20VoteSecure%20-%20Full%20Article.pdf) handbook.
 
 ## Relevant Technologies
 
