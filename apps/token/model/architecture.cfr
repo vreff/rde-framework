@@ -1,0 +1,282 @@
+// Handwritten system model derived from the token Lando examples.
+
+tokenSystem: System
+    [ subSystems = TransactionProcessorSubsystem, StateSubsystem ]
+    [ events = depositEvent, withdrawEvent, transferEvent, settleEvent, rejectEvent,
+               validateTransferAccountsEvent, reserveTransferAmountEvent, applyTransferLedgerUpdateEvent,
+               createPendingWithdrawalEvent, reviewPendingWithdrawalEvent ]
+    [ scenarios = successfulDepositScenario, successfulTransferScenario, insufficientBalanceScenario, pendingWithdrawalSettlementScenario, invalidTransferScenario ]
+
+TransactionProcessorSubsystem: Subsystem
+    [ parentSystem = tokenSystem ]
+    [ description = "Processes incoming transaction requests and updates balances." ]
+    [ dependsOn = StateSubsystem ]
+    [ components = TransactionComponent, SettlementComponent,
+                   TransferLedgerUpdateRuleComponent, TransferLedgerPreconditionComponent, TransferLedgerSafetyInvariantComponent,
+                   DepositUpdateRuleComponent, DepositPreconditionComponent, DepositSafetyInvariantComponent,
+                   WithdrawalUpdateRuleComponent, WithdrawalPreconditionComponent, WithdrawalSafetyInvariantComponent ]
+    [ satisfies = balanceconsistency, nooverdraft, pendingsettlement, transfervalidity, singlesource ]
+    [ actors = ClientActor, SettlementOperator ]
+    [ assets = TransactionRequestAsset, SettlementRecordAsset ]
+
+StateSubsystem: Subsystem
+    [ parentSystem = tokenSystem ]
+    [ description = "Stores the current account state and pending operations." ]
+    [ components = SenderAccountComponent, ReceiverAccountComponent, PendingWithdrawalComponent, TotalSupplyComponent ]
+    [ satisfies = balanceconsistency, nooverdraft, pendingsettlement, transfervalidity, singlesource ]
+    [ actors = SettlementOperator, LedgerMaintainer ]
+    [ assets = AccountBalancesAsset, PendingWithdrawalsAsset, TotalSupplyAsset ]
+
+ClientActor: Actor
+    [ description = "Client that submits deposit, withdrawal, and transfer requests to the transaction processor." ]
+    [ uses = TransactionProcessorSubsystem ]
+
+SettlementOperator: Actor
+    [ description = "Operator or service that settles or rejects pending withdrawals." ]
+    [ uses = TransactionProcessorSubsystem, StateSubsystem ]
+
+LedgerMaintainer: Actor
+    [ description = "Actor responsible for maintaining consistent account and total-supply state." ]
+    [ uses = StateSubsystem ]
+
+TransactionRequestAsset: Asset
+    [ description = "Incoming transaction request representing a deposit, withdrawal, or transfer." ]
+    [ heldBySystem = TransactionProcessorSubsystem ]
+    [ heldByActor = ClientActor ]
+
+SettlementRecordAsset: Asset
+    [ description = "Final resolution record for a pending withdrawal settlement." ]
+    [ heldBySystem = TransactionProcessorSubsystem ]
+    [ heldByActor = SettlementOperator ]
+
+AccountBalancesAsset: Asset
+    [ description = "Map of account identifiers to balances for the token system." ]
+    [ heldBySystem = StateSubsystem ]
+    [ heldByActor = LedgerMaintainer ]
+
+PendingWithdrawalsAsset: Asset
+    [ description = "Collection of pending withdrawal records awaiting settlement or rejection." ]
+    [ heldBySystem = StateSubsystem ]
+    [ heldByActor = SettlementOperator, LedgerMaintainer ]
+
+TotalSupplyAsset: Asset
+    [ description = "Aggregate total token supply derived from all account balances." ]
+    [ heldBySystem = StateSubsystem ]
+    [ heldByActor = LedgerMaintainer ]
+
+TransactionComponent: Component
+    [ enclosingSubsystem = TransactionProcessorSubsystem ]
+    [ description = "Request to move funds between accounts or create a pending withdrawal." ]
+
+SettlementComponent: Component
+    [ enclosingSubsystem = TransactionProcessorSubsystem ]
+    [ description = "Final resolution of a pending withdrawal." ]
+
+TransferLedgerUpdateRuleComponent: BalanceTransitionUpdate
+    [ enclosingSubsystem = TransactionProcessorSubsystem ]
+    [ description = "Executable rule for transfer debit/credit state transition and conservation." ]
+
+TransferLedgerPreconditionComponent: BalanceTransitionPrecondition
+    [ enclosingSubsystem = TransactionProcessorSubsystem ]
+    [ description = "Precondition checks over transfer transition inputs." ]
+    [ transition = TransferLedgerUpdateRuleComponent ]
+
+TransferLedgerSafetyInvariantComponent: BalanceTransitionInvariant
+    [ enclosingSubsystem = TransactionProcessorSubsystem ]
+    [ description = "Safety and conservation constraints over transfer state transitions." ]
+    [ transition = TransferLedgerUpdateRuleComponent ]
+
+DepositUpdateRuleComponent: DepositTransitionUpdate
+    [ enclosingSubsystem = TransactionProcessorSubsystem ]
+    [ description = "Executable rule for deposit state transition." ]
+
+DepositPreconditionComponent: DepositTransitionPrecondition
+    [ enclosingSubsystem = TransactionProcessorSubsystem ]
+    [ description = "Precondition checks for deposit transitions." ]
+    [ transition = DepositUpdateRuleComponent ]
+
+DepositSafetyInvariantComponent: DepositTransitionInvariant
+    [ enclosingSubsystem = TransactionProcessorSubsystem ]
+    [ description = "Safety checks for deposit transitions." ]
+    [ transition = DepositUpdateRuleComponent ]
+
+WithdrawalUpdateRuleComponent: WithdrawalTransitionUpdate
+    [ enclosingSubsystem = TransactionProcessorSubsystem ]
+    [ description = "Executable rule for withdrawal settlement state transition." ]
+
+WithdrawalPreconditionComponent: WithdrawalTransitionPrecondition
+    [ enclosingSubsystem = TransactionProcessorSubsystem ]
+    [ description = "Precondition checks for withdrawal settlement transitions." ]
+    [ transition = WithdrawalUpdateRuleComponent ]
+
+WithdrawalSafetyInvariantComponent: WithdrawalTransitionInvariant
+    [ enclosingSubsystem = TransactionProcessorSubsystem ]
+    [ description = "Safety checks for withdrawal settlement transitions." ]
+    [ transition = WithdrawalUpdateRuleComponent ]
+
+SenderAccountComponent: AccountState
+    [ enclosingSubsystem = StateSubsystem ]
+    [ description = "Current balance and status for the transfer sender account." ]
+    [ balance >= 0 ]
+    [ balance <= 1000 ]
+
+ReceiverAccountComponent: AccountState
+    [ enclosingSubsystem = StateSubsystem ]
+    [ description = "Current balance and status for the transfer receiver account." ]
+    [ balance >= 0 ]
+    [ balance <= 1000 ]
+
+PendingWithdrawalComponent: Component
+    [ enclosingSubsystem = StateSubsystem ]
+    [ description = "Withdrawal request awaiting validation or settlement." ]
+
+TotalSupplyComponent: TotalSupplyState
+    [ enclosingSubsystem = StateSubsystem ]
+    [ description = "Aggregate token supply across all accounts." ]
+    [ totalSupply >= 0 ]
+    [ totalSupply <= 2000 ]
+    [ totalSupply = (sum SenderAccountComponent.balance) + (sum ReceiverAccountComponent.balance) ]
+
+depositEvent: Event
+    [ label = "deposit" ]
+    [ description = "A deposit adds funds to an account." ]
+    [ parentSystem = tokenSystem ]
+    [ touches = TransactionProcessorSubsystem, StateSubsystem ]
+    [ executesDeposit = DepositUpdateRuleComponent ]
+    [ enforceDepositPreconditions = DepositPreconditionComponent ]
+    [ enforceDepositInvariants = DepositSafetyInvariantComponent ]
+    [ preserves = balanceconsistency, nooverdraft ]
+
+withdrawEvent: Event
+    [ label = "withdraw" ]
+    [ description = "A withdrawal removes funds from an account." ]
+    [ parentSystem = tokenSystem ]
+    [ touches = TransactionProcessorSubsystem, StateSubsystem ]
+    [ preserves = nooverdraft, balanceconsistency ]
+
+transferEvent: Event
+    [ label = "transfer" ]
+    [ description = "A transfer moves funds from one account to another." ]
+    [ parentSystem = tokenSystem ]
+    [ touches = TransactionProcessorSubsystem, StateSubsystem ]
+    [ preserves = balanceconsistency, transfervalidity, singlesource, nooverdraft ]
+
+settleEvent: Event
+    [ label = "settle" ]
+    [ description = "A settlement finalizes a pending withdrawal." ]
+    [ parentSystem = tokenSystem ]
+    [ touches = TransactionProcessorSubsystem, StateSubsystem ]
+    [ executesWithdrawal = WithdrawalUpdateRuleComponent ]
+    [ enforceWithdrawalPreconditions = WithdrawalPreconditionComponent ]
+    [ enforceWithdrawalInvariants = WithdrawalSafetyInvariantComponent ]
+    [ preserves = pendingsettlement, balanceconsistency, nooverdraft ]
+
+rejectEvent: Event
+    [ label = "reject" ]
+    [ description = "A rejection cancels a pending withdrawal." ]
+    [ parentSystem = tokenSystem ]
+    [ touches = TransactionProcessorSubsystem, StateSubsystem ]
+    [ preserves = pendingsettlement, nooverdraft ]
+
+validateTransferAccountsEvent: Event
+    [ label = "validate transfer accounts" ]
+    [ description = "Verifies that sender and receiver accounts are recognized before transfer execution." ]
+    [ parentSystem = tokenSystem ]
+    [ touches = TransactionProcessorSubsystem, StateSubsystem ]
+    [ preserves = transfervalidity ]
+
+reserveTransferAmountEvent: Event
+    [ label = "reserve transfer amount" ]
+    [ description = "Reserves transfer amount in the sender account prior to ledger commit." ]
+    [ parentSystem = tokenSystem ]
+    [ touches = TransactionProcessorSubsystem, StateSubsystem ]
+    [ preserves = nooverdraft, balanceconsistency ]
+
+applyTransferLedgerUpdateEvent: Event
+    [ label = "apply transfer ledger update" ]
+    [ description = "Commits debits and credits for the transfer on the authoritative state ledger." ]
+    [ parentSystem = tokenSystem ]
+    [ touches = TransactionProcessorSubsystem, StateSubsystem ]
+    [ executes = TransferLedgerUpdateRuleComponent ]
+    [ enforcePreconditions = TransferLedgerPreconditionComponent ]
+    [ enforces = TransferLedgerSafetyInvariantComponent ]
+    [ preserves = singlesource, balanceconsistency, nooverdraft ]
+
+createPendingWithdrawalEvent: Event
+    [ label = "create pending withdrawal" ]
+    [ description = "Registers a withdrawal request as pending until settlement decision." ]
+    [ parentSystem = tokenSystem ]
+    [ touches = TransactionProcessorSubsystem, StateSubsystem ]
+    [ preserves = pendingsettlement, nooverdraft ]
+
+reviewPendingWithdrawalEvent: Event
+    [ label = "review pending withdrawal" ]
+    [ description = "Settlement operator reviews pending withdrawal and chooses settle or reject." ]
+    [ parentSystem = tokenSystem ]
+    [ touches = TransactionProcessorSubsystem, StateSubsystem ]
+    [ preserves = pendingsettlement ]
+
+successfulDepositScenario: Scenario
+    [ label = "successful deposit" ]
+    [ description = "A valid deposit request is applied to account state." ]
+    [ parentSystem = tokenSystem ]
+    [ initiator = ClientActor ]
+    [ consumedAssets = TransactionRequestAsset ]
+    [ producedAssets = AccountBalancesAsset ]
+    [ outcome = "success" ]
+    [ steps = depositEvent ]
+    [ validates = nooverdraft, balanceconsistency ]
+    [ some depositEvent.executesDeposit ]
+
+successfulTransferScenario: Scenario
+    [ label = "successful transfer" ]
+    [ description = "A validated transfer is reserved and then committed to the ledger while preserving token supply." ]
+    [ parentSystem = tokenSystem ]
+    [ initiator = ClientActor ]
+    [ consumedAssets = TransactionRequestAsset, AccountBalancesAsset ]
+    [ producedAssets = AccountBalancesAsset ]
+    [ outcome = "success" ]
+    [ steps = validateTransferAccountsEvent, reserveTransferAmountEvent, applyTransferLedgerUpdateEvent, transferEvent ]
+    [ validates = transfervalidity, singlesource, balanceconsistency ]
+    [ some applyTransferLedgerUpdateEvent.executes ]
+
+insufficientBalanceScenario: Scenario
+    [ label = "insufficient balance" ]
+    [ description = "A withdrawal attempt that would violate non-overdraft is blocked and rejected with no state debit." ]
+    [ parentSystem = tokenSystem ]
+    [ initiator = ClientActor ]
+    [ consumedAssets = TransactionRequestAsset, AccountBalancesAsset ]
+    [ producedAssets = SettlementRecordAsset ]
+    [ outcome = "rejected" ]
+    [ steps = withdrawEvent, createPendingWithdrawalEvent, reviewPendingWithdrawalEvent, rejectEvent ]
+    [ validates = nooverdraft ]
+    attemptedWithdrawalAmount -> int
+    senderBefore -> int
+    senderAfter -> int
+    [ attemptedWithdrawalAmount > 0 ]
+    [ senderBefore >= 0 ]
+    [ senderBefore = senderAfter ]
+    [ attemptedWithdrawalAmount > senderBefore ]
+
+pendingWithdrawalSettlementScenario: Scenario
+    [ label = "pending withdrawal settlement" ]
+    [ description = "A withdrawal is staged as pending and then finalized by the settlement operator." ]
+    [ parentSystem = tokenSystem ]
+    [ initiator = SettlementOperator ]
+    [ consumedAssets = PendingWithdrawalsAsset, AccountBalancesAsset ]
+    [ producedAssets = SettlementRecordAsset, AccountBalancesAsset ]
+    [ outcome = "settled" ]
+    [ steps = withdrawEvent, createPendingWithdrawalEvent, reviewPendingWithdrawalEvent, settleEvent ]
+    [ validates = pendingsettlement, balanceconsistency ]
+    [ some settleEvent.executesWithdrawal ]
+
+invalidTransferScenario: Scenario
+    [ label = "invalid transfer" ]
+    [ description = "A transfer request with invalid account endpoints is rejected before reservation or ledger commit." ]
+    [ parentSystem = tokenSystem ]
+    [ initiator = ClientActor ]
+    [ consumedAssets = TransactionRequestAsset ]
+    [ producedAssets = SettlementRecordAsset ]
+    [ outcome = "rejected" ]
+    [ steps = validateTransferAccountsEvent, rejectEvent ]
+    [ validates = transfervalidity ]

@@ -1,0 +1,16 @@
+requirements Token Requirements
+
+balance consistency
+The sum of all account balances must equal the total token supply.
+
+no overdraft
+An account balance must never be less than zero.
+
+pending settlement
+Every pending withdrawal must eventually be settled or rejected.
+
+transfer validity
+A transfer must move funds only between valid accounts.
+
+single source
+A transfer cannot create or destroy tokens; it must preserve total supply.

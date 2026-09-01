@@ -1,0 +1,18 @@
+# Python virtual environments
+.venv/
+**/.venv/
+
+# Python caches
+__pycache__/
+*.py[cod]
+
+# Generated app artifacts
+apps/*/generated/
+apps/*/out/
+apps/*/instances/
+apps/*/instances-json/
+apps/*/traceability/
+apps/*/reports/
+
+# Kotlin/Maven build outputs
+apps/*/source/kotlin/target/

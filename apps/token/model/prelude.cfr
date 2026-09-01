@@ -1,0 +1,149 @@
+// Handwritten shared declarations for the BESSPIN feature model.
+
+abstract Requirement
+    label -> string
+    description -> string
+
+abstract System
+    subSystems -> Subsystem +
+    events -> Event *
+    scenarios -> Scenario *
+    [ all s:subSystems | s.parentSystem = this ]
+    [ all e:events | e.parentSystem = this ]
+    [ all sc:scenarios | sc.parentSystem = this ]
+
+abstract Subsystem
+    description -> string
+
+    parentSystem -> System ?
+    components -> Component *
+    dependsOn -> Subsystem *
+    satisfies -> Requirement *
+    actors -> Actor *
+    assets -> Asset *
+    [ parentSystem => this in parentSystem.subSystems ]
+    [ all c:components | c.enclosingSubsystem = this ]
+    [ all a:actors | this in a.uses ]
+    [ all a:assets | this in a.heldBySystem ]
+
+abstract Component
+    description -> string
+    enclosingSubsystem -> Subsystem
+    [ this in enclosingSubsystem.components ]
+
+abstract AccountState : Component
+    balance -> int
+    [ balance >= 0 ]
+
+abstract TotalSupplyState : Component
+    totalSupply -> int
+    [ totalSupply >= 0 ]
+
+abstract BalanceTransitionUpdate : Component
+    transferAmount -> int
+    senderBefore -> int
+    senderAfter -> int
+    receiverBefore -> int
+    receiverAfter -> int
+    [ senderAfter = senderBefore - transferAmount ]
+    [ receiverAfter = receiverBefore + transferAmount ]
+
+abstract BalanceTransitionPrecondition : Component
+    transition -> BalanceTransitionUpdate
+    [ some transition ]
+    [ transition.transferAmount > 0 ]
+
+abstract BalanceTransitionInvariant : Component
+    transition -> BalanceTransitionUpdate
+    [ some transition ]
+    [ transition.senderBefore >= 0 ]
+    [ transition.receiverBefore >= 0 ]
+    [ transition.senderAfter >= 0 ]
+    [ transition.senderBefore + transition.receiverBefore = transition.senderAfter + transition.receiverAfter ]
+
+abstract DepositTransitionUpdate : Component
+    depositAmount -> int
+    balanceBefore -> int
+    balanceAfter -> int
+    [ balanceAfter = balanceBefore + depositAmount ]
+
+abstract DepositTransitionPrecondition : Component
+    transition -> DepositTransitionUpdate
+    [ some transition ]
+    [ transition.depositAmount > 0 ]
+
+abstract DepositTransitionInvariant : Component
+    transition -> DepositTransitionUpdate
+    [ some transition ]
+    [ transition.balanceBefore >= 0 ]
+    [ transition.balanceAfter >= 0 ]
+
+abstract WithdrawalTransitionUpdate : Component
+    withdrawalAmount -> int
+    balanceBefore -> int
+    balanceAfter -> int
+    [ balanceAfter = balanceBefore - withdrawalAmount ]
+
+abstract WithdrawalTransitionPrecondition : Component
+    transition -> WithdrawalTransitionUpdate
+    [ some transition ]
+    [ transition.withdrawalAmount > 0 ]
+    [ transition.withdrawalAmount <= transition.balanceBefore ]
+
+abstract WithdrawalTransitionInvariant : Component
+    transition -> WithdrawalTransitionUpdate
+    [ some transition ]
+    [ transition.balanceBefore >= 0 ]
+    [ transition.balanceAfter >= 0 ]
+
+abstract Actor
+    description -> string
+    uses -> Subsystem *
+    [ all s:uses | this in s.actors ]
+
+abstract Asset
+    description -> string
+    heldByActor -> Actor *
+    heldBySystem -> Subsystem *
+
+abstract Event
+    label -> string
+    description -> string
+    parentSystem -> System
+    touches -> Subsystem *
+    executes -> BalanceTransitionUpdate ?
+    enforcePreconditions -> BalanceTransitionPrecondition *
+    enforces -> BalanceTransitionInvariant *
+    executesDeposit -> DepositTransitionUpdate ?
+    enforceDepositPreconditions -> DepositTransitionPrecondition *
+    enforceDepositInvariants -> DepositTransitionInvariant *
+    executesWithdrawal -> WithdrawalTransitionUpdate ?
+    enforceWithdrawalPreconditions -> WithdrawalTransitionPrecondition *
+    enforceWithdrawalInvariants -> WithdrawalTransitionInvariant *
+    preserves -> Requirement *
+    [ this in parentSystem.events ]
+    [ executes => executes.enclosingSubsystem in touches ]
+    [ all p:enforcePreconditions | p.enclosingSubsystem in touches ]
+    [ all i:enforces | i.enclosingSubsystem in touches ]
+    [ executesDeposit => executesDeposit.enclosingSubsystem in touches ]
+    [ all p:enforceDepositPreconditions | p.enclosingSubsystem in touches ]
+    [ all i:enforceDepositInvariants | i.enclosingSubsystem in touches ]
+    [ executesWithdrawal => executesWithdrawal.enclosingSubsystem in touches ]
+    [ all p:enforceWithdrawalPreconditions | p.enclosingSubsystem in touches ]
+    [ all i:enforceWithdrawalInvariants | i.enclosingSubsystem in touches ]
+
+abstract Scenario
+    label -> string
+    description -> string
+    parentSystem -> System
+    steps -> Event +
+    validates -> Requirement *
+    initiator -> Actor ?
+    consumedAssets -> Asset *
+    producedAssets -> Asset *
+    outcome -> string
+    [ this in parentSystem.scenarios ]
+    [ initiator => initiator in parentSystem.subSystems.actors ]
+    [ all a:consumedAssets | a in parentSystem.subSystems.assets ]
+    [ all a:producedAssets | a in parentSystem.subSystems.assets ]
+
